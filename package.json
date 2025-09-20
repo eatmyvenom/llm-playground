@@ -1,0 +1,43 @@
+{
+  "name": "llm-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "preinstall": "node scripts/enforce-pnpm.mjs",
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "format": "prettier \"**/*.{ts,tsx,js,json,md}\" --write",
+    "clean": "turbo run clean --filter=..."
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.3.0",
+    "@swc/core": "^1.3.100",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-prettier": "^5.1.0",
+    "eslint-plugin-turbo": "^2.0.0",
+    "globals": "^15.0.0",
+    "only-allow": "^1.1.1",
+    "pm2": "^5.4.0",
+    "prettier": "^3.2.0",
+    "turbo": "^2.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "langchain": "npm:langchain@next",
+      "@langchain/core": "npm:@langchain/core@next",
+      "@langchain/community": "npm:@langchain/community@next",
+      "@langchain/openai": "npm:@langchain/openai@next"
+    }
+  }
+}

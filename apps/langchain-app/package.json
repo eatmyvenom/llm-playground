@@ -1,0 +1,28 @@
+{
+  "name": "langchain-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "swc src -d dist --source-maps",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@langchain/community": "npm:@langchain/community@next",
+    "@langchain/core": "npm:@langchain/core@next",
+    "@langchain/langgraph": "1.0.0-alpha.3",
+    "@langchain/openai": "npm:@langchain/openai@next",
+    "langchain": "npm:langchain@next",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0"
+  }
+}
