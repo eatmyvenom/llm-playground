@@ -90,7 +90,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
   SmartWebSearchInput,
   SearchToolInput
 > {
-  readonly name = "smart_web_search" as const;
+  readonly name = "web_search" as const;
   readonly description =
     "Run a web search and summarize the top results using Brave, Tavily, Exa, or Firecrawl.";
 

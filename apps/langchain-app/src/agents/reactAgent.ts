@@ -41,7 +41,7 @@ const queryRecordsTool = new DynamicStructuredTool({
 const toolsServerUrl = process.env.TOOLS_SERVER_URL ?? "http://localhost:4000";
 
 const smartWebSearchTool = new DynamicStructuredTool({
-  name: "smart_web_search",
+  name: "web_search",
   description:
     "Perform a multi-source web search via the tools server. Returns structured JSON with query breakdown and top results.",
   schema: z.object({
@@ -69,7 +69,7 @@ const smartWebSearchTool = new DynamicStructuredTool({
       body: JSON.stringify({
         jsonrpc: "2.0",
         method: "tools.call",
-        params: { name: "smart_web_search", arguments: input },
+        params: { name: "web_search", arguments: input },
       }),
     });
 
@@ -85,9 +85,7 @@ const smartWebSearchTool = new DynamicStructuredTool({
     };
 
     if (!payload.result) {
-      throw new Error(
-        "tools-server returned an empty result for smart_web_search",
-      );
+      throw new Error("tools-server returned an empty result for web_search");
     }
 
     return payload.result.content ?? JSON.stringify(payload.result);
