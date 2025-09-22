@@ -46,42 +46,69 @@ type FieldOverrideMap = Record<string, Partial<ToolFieldOptions>>;
 
 const TOOL_FIELDS_METADATA_KEY = Symbol("mcp:tool:fields");
 
-function defineField(target: object, propertyKey: string | symbol, options: ToolFieldOptions): void {
+function defineField(
+  target: object,
+  propertyKey: string | symbol,
+  options: ToolFieldOptions,
+): void {
   const constructor = target.constructor;
-  const existing: Array<ToolFieldDescriptor> = Reflect.getOwnMetadata(TOOL_FIELDS_METADATA_KEY, constructor) ?? [];
-  const filtered = existing.filter((descriptor) => descriptor.name !== propertyKey);
+  const existing: Array<ToolFieldDescriptor> =
+    Reflect.getOwnMetadata(TOOL_FIELDS_METADATA_KEY, constructor) ?? [];
+  const filtered = existing.filter(
+    (descriptor) => descriptor.name !== propertyKey,
+  );
   const entry: ToolFieldDescriptor = {
     name: String(propertyKey),
     options: { ...options },
   };
-  Reflect.defineMetadata(TOOL_FIELDS_METADATA_KEY, [...filtered, entry], constructor);
+  Reflect.defineMetadata(
+    TOOL_FIELDS_METADATA_KEY,
+    [...filtered, entry],
+    constructor,
+  );
 }
 
-export function toolFieldDecorator(options: ToolFieldOptions): PropertyDecorator {
+export function toolFieldDecorator(
+  options: ToolFieldOptions,
+): PropertyDecorator {
   return (target, propertyKey) => {
     defineField(target, propertyKey, options);
   };
 }
 
-function createTypedDecorator(type: ToolFieldType, config: ToolFieldConfig = {}): PropertyDecorator {
+function createTypedDecorator(
+  type: ToolFieldType,
+  config: ToolFieldConfig = {},
+): PropertyDecorator {
   return toolFieldDecorator({ ...config, type });
 }
 
 export const toolField = Object.freeze({
-  string: (config: ToolFieldConfig = {}): PropertyDecorator => createTypedDecorator("string", config),
-  boolean: (config: ToolFieldConfig = {}): PropertyDecorator => createTypedDecorator("boolean", config),
-  integer: (config: ToolFieldConfig = {}): PropertyDecorator => createTypedDecorator("integer", config),
-  number: (config: ToolFieldConfig = {}): PropertyDecorator => createTypedDecorator("number", config),
+  string: (config: ToolFieldConfig = {}): PropertyDecorator =>
+    createTypedDecorator("string", config),
+  boolean: (config: ToolFieldConfig = {}): PropertyDecorator =>
+    createTypedDecorator("boolean", config),
+  integer: (config: ToolFieldConfig = {}): PropertyDecorator =>
+    createTypedDecorator("integer", config),
+  number: (config: ToolFieldConfig = {}): PropertyDecorator =>
+    createTypedDecorator("number", config),
 });
 
-function collectFieldMetadata(constructor: ToolInputConstructor<object>): Array<ToolFieldDescriptor> {
+function collectFieldMetadata(
+  constructor: ToolInputConstructor<object>,
+): Array<ToolFieldDescriptor> {
   const parentPrototype = Object.getPrototypeOf(constructor.prototype);
   const parentConstructor =
-    parentPrototype && parentPrototype !== Object.prototype ? parentPrototype.constructor : undefined;
+    parentPrototype && parentPrototype !== Object.prototype
+      ? parentPrototype.constructor
+      : undefined;
 
-  const parentFields = parentConstructor ? collectFieldMetadata(parentConstructor as ToolInputConstructor<object>) : [];
+  const parentFields = parentConstructor
+    ? collectFieldMetadata(parentConstructor as ToolInputConstructor<object>)
+    : [];
 
-  const ownFields: Array<ToolFieldDescriptor> = Reflect.getOwnMetadata(TOOL_FIELDS_METADATA_KEY, constructor) ?? [];
+  const ownFields: Array<ToolFieldDescriptor> =
+    Reflect.getOwnMetadata(TOOL_FIELDS_METADATA_KEY, constructor) ?? [];
 
   const merged = [...parentFields];
   for (const descriptor of ownFields) {
@@ -123,26 +150,38 @@ function toJsonSchema(options: ToolFieldOptions): Record<string, unknown> {
   return schema;
 }
 
-function ensureType(name: string, value: unknown, options: ToolFieldOptions): void {
+function ensureType(
+  name: string,
+  value: unknown,
+  options: ToolFieldOptions,
+): void {
   switch (options.type) {
     case "string":
       if (typeof value !== "string") {
-        throw new BadRequestException(`Invalid payload: ${name} must be a string`);
+        throw new BadRequestException(
+          `Invalid payload: ${name} must be a string`,
+        );
       }
       break;
     case "boolean":
       if (typeof value !== "boolean") {
-        throw new BadRequestException(`Invalid payload: ${name} must be a boolean`);
+        throw new BadRequestException(
+          `Invalid payload: ${name} must be a boolean`,
+        );
       }
       break;
     case "integer":
       if (typeof value !== "number" || !Number.isInteger(value)) {
-        throw new BadRequestException(`Invalid payload: ${name} must be an integer`);
+        throw new BadRequestException(
+          `Invalid payload: ${name} must be an integer`,
+        );
       }
       break;
     case "number":
       if (typeof value !== "number" || Number.isNaN(value)) {
-        throw new BadRequestException(`Invalid payload: ${name} must be a number`);
+        throw new BadRequestException(
+          `Invalid payload: ${name} must be a number`,
+        );
       }
       break;
     default:
@@ -150,21 +189,35 @@ function ensureType(name: string, value: unknown, options: ToolFieldOptions): vo
   }
 
   if (options.enum && !options.enum.includes(value as never)) {
-    throw new BadRequestException(`Invalid payload: ${name} must be one of ${options.enum.join(", ")}`);
+    throw new BadRequestException(
+      `Invalid payload: ${name} must be one of ${options.enum.join(", ")}`,
+    );
   }
 
   if (typeof value === "number") {
-    if (Object.hasOwn(options, "minimum") && value < (options.minimum as number)) {
-      throw new BadRequestException(`Invalid payload: ${name} must be >= ${String(options.minimum)}`);
+    if (
+      Object.hasOwn(options, "minimum") &&
+      value < (options.minimum as number)
+    ) {
+      throw new BadRequestException(
+        `Invalid payload: ${name} must be >= ${String(options.minimum)}`,
+      );
     }
-    if (Object.hasOwn(options, "maximum") && value > (options.maximum as number)) {
-      throw new BadRequestException(`Invalid payload: ${name} must be <= ${String(options.maximum)}`);
+    if (
+      Object.hasOwn(options, "maximum") &&
+      value > (options.maximum as number)
+    ) {
+      throw new BadRequestException(
+        `Invalid payload: ${name} must be <= ${String(options.maximum)}`,
+      );
     }
   }
 }
 
-export abstract class ReflectiveMcpTool<SchemaInput extends object, ParsedInput extends object = SchemaInput>
-  implements McpTool
+export abstract class ReflectiveMcpTool<
+  SchemaInput extends object,
+  ParsedInput extends object = SchemaInput,
+> implements McpTool
 {
   abstract readonly name: string;
   abstract readonly description: string;
@@ -212,7 +265,9 @@ export abstract class ReflectiveMcpTool<SchemaInput extends object, ParsedInput 
 
   protected parseArgs(args: Record<string, unknown>): ParsedInput {
     if (!args || typeof args !== "object" || Array.isArray(args)) {
-      throw new BadRequestException("Invalid payload: arguments must be an object");
+      throw new BadRequestException(
+        "Invalid payload: arguments must be an object",
+      );
     }
 
     const entries = this.resolveFields();
@@ -220,7 +275,9 @@ export abstract class ReflectiveMcpTool<SchemaInput extends object, ParsedInput 
 
     for (const key of Object.keys(args)) {
       if (!knownKeys.has(key)) {
-        throw new BadRequestException(`Invalid payload: unexpected field ${key}`);
+        throw new BadRequestException(
+          `Invalid payload: unexpected field ${key}`,
+        );
       }
     }
 
