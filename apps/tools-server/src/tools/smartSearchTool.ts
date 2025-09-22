@@ -65,9 +65,9 @@ class SmartWebSearchInput {
   engine?: string;
 
   @toolField.integer({
-    description: "Maximum number of results to return per query (1-8)",
+    description: "Maximum number of results to return per query (1-10)",
     minimum: 1,
-    maximum: 8,
+    maximum: 10,
     required: false,
   })
   maxResults?: number;
