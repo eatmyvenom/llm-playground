@@ -9,3 +9,4 @@ logs
 .turbo
 coverage
 *.log
+.pnpm-store

@@ -44,7 +44,7 @@ export default function createConfig({ tsconfigPath = "./tsconfig.json" } = {}) 
       },
       rules: {
         ...(hasProjectConfig ? typeAwareRules : {}),
-        "prettier/prettier": "warn",
+        "prettier/prettier": ["warn", { printWidth: 120 }],
         "turbo/no-undeclared-env-vars": "error"
       }
     }

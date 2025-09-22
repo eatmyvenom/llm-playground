@@ -5,7 +5,7 @@ export class AppService {
   getHealth() {
     return {
       status: "ok",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 }
