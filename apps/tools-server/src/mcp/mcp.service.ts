@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { SampleDatabaseTool } from "../tools/sampleTool.js";
+import { type McpTool, type McpToolDefinition } from "../tools/baseTool.js";
+import { SmartWebSearchTool } from "../tools/smartSearchTool.js";
 
 export interface McpListResponse {
-  tools: ReturnType<SampleDatabaseTool["listDefinition"]>[];
+  tools: Array<McpToolDefinition>;
 }
 
 export interface McpCallPayload {
@@ -12,19 +14,27 @@ export interface McpCallPayload {
 
 @Injectable()
 export class McpService {
-  constructor(private readonly sampleTool: SampleDatabaseTool) {}
+  private readonly toolRegistry: Map<string, McpTool>;
+
+  constructor(
+    private readonly sampleTool: SampleDatabaseTool,
+    private readonly smartSearchTool: SmartWebSearchTool,
+  ) {
+    this.toolRegistry = new Map([sampleTool, smartSearchTool].map((tool) => [tool.name, tool]));
+  }
 
   listTools(): McpListResponse {
     return {
-      tools: [this.sampleTool.listDefinition()]
+      tools: Array.from(this.toolRegistry.values()).map((tool) => tool.listDefinition()),
     };
   }
 
   async callTool(payload: McpCallPayload) {
-    if (payload.name !== this.sampleTool.name) {
+    const tool = this.toolRegistry.get(payload.name);
+    if (!tool) {
       throw new NotFoundException(`Tool not found: ${payload.name}`);
     }
 
-    return this.sampleTool.call(payload.arguments as { id: string });
+    return tool.call(payload.arguments);
   }
 }

@@ -38,7 +38,7 @@ export class McpController {
   list(@Body() body: McpListRequestDto) {
     return {
       jsonrpc: body.jsonrpc ?? "2.0",
-      result: this.mcpService.listTools()
+      result: this.mcpService.listTools(),
     };
   }
 
@@ -47,7 +47,7 @@ export class McpController {
     const result = await this.mcpService.callTool(body.params);
     return {
       jsonrpc: body.jsonrpc ?? "2.0",
-      result
+      result,
     };
   }
 }

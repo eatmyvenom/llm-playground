@@ -1,4 +1,5 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
+import { type McpToolCallResult, ReflectiveMcpTool, toolField } from "./baseTool.js";
 
 interface MockRow {
   id: string;
@@ -6,56 +7,45 @@ interface MockRow {
   details: string;
 }
 
-type ToolCallInput = {
-  id: string;
-};
-
-const MOCK_DATA: MockRow[] = [
-  { id: "alpha", title: "LLM usage summary", details: "Latest usage metrics for LLM-enabled workflows." },
-  { id: "beta", title: "Agent latency audit", details: "Latency analysis for agent execution pipeline." }
+const MOCK_DATA: Array<MockRow> = [
+  {
+    id: "alpha",
+    title: "LLM usage summary",
+    details: "Latest usage metrics for LLM-enabled workflows.",
+  },
+  {
+    id: "beta",
+    title: "Agent latency audit",
+    details: "Latency analysis for agent execution pipeline.",
+  },
 ];
 
-export type McpToolDefinition = {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-};
+class SampleDatabaseInput {
+  @toolField.string({ description: "Record identifier (e.g. alpha)" })
+  id!: string;
+}
 
-export type McpToolCallResult = {
-  content: string;
-};
-
-export class SampleDatabaseTool {
+@Injectable()
+export class SampleDatabaseTool extends ReflectiveMcpTool<SampleDatabaseInput> {
   readonly name = "mock_db_lookup";
   readonly description = "Lookup a mock record by id and return summary details.";
 
-  listDefinition(): McpToolDefinition {
-    return {
-      name: this.name,
-      description: this.description,
-      inputSchema: {
-        type: "object",
-        properties: {
-          id: { type: "string", description: "Record identifier (e.g. alpha)" }
-        },
-        required: ["id"],
-        additionalProperties: false
-      }
-    };
-  }
+  protected readonly inputConstructor = SampleDatabaseInput;
 
-  async call(args: ToolCallInput): Promise<McpToolCallResult> {
-    if (!args || typeof args.id !== "string") {
+  async call(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    const input = this.parseArgs(args);
+    const id = input.id.trim();
+    if (!id) {
       throw new BadRequestException("Invalid payload: id is required");
     }
 
-    const record = MOCK_DATA.find((entry) => entry.id === args.id.toLowerCase());
+    const record = MOCK_DATA.find((entry) => entry.id === id.toLowerCase());
     if (!record) {
-      return { content: `No record found for id: ${args.id}` };
+      return { content: `No record found for id: ${id}` };
     }
 
     return {
-      content: `${record.title}: ${record.details}`
+      content: `${record.title}: ${record.details}`,
     };
   }
 }

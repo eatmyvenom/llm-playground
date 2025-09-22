@@ -38,6 +38,46 @@ const queryRecordsTool = new DynamicStructuredTool({
   },
 });
 
+const toolsServerUrl = process.env.TOOLS_SERVER_URL ?? "http://localhost:4000";
+
+const smartWebSearchTool = new DynamicStructuredTool({
+  name: "smart_web_search",
+  description:
+    "Perform a multi-source web search via the tools server. Returns structured JSON with query breakdown and top results.",
+  schema: z.object({
+    query: z.string().min(3).max(512).describe("Search query to execute"),
+    allowSplit: z.boolean().optional().describe("Allow heuristic query splitting (default true)"),
+    engine: z.enum(["brave", "tavily", "exa", "firecrawl"]).optional().describe("Preferred engine override"),
+    maxResults: z.number().int().min(1).max(8).optional().describe("Limit results per query"),
+  }),
+  func: async (input) => {
+    const response = await fetch(`${toolsServerUrl}/mcp/tools/call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools.call",
+        params: { name: "smart_web_search", arguments: input },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`tools-server error (${response.status}): ${errorText || response.statusText}`);
+    }
+
+    const payload = (await response.json()) as {
+      result?: { content?: string };
+    };
+
+    if (!payload.result) {
+      throw new Error("tools-server returned an empty result for smart_web_search");
+    }
+
+    return payload.result.content ?? JSON.stringify(payload.result);
+  },
+});
+
 export async function buildReactAgent() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -51,6 +91,6 @@ export async function buildReactAgent() {
   });
 
   // Tools array is the initial integration point; MCP tool registry can be mapped here.
-  const tools = [queryRecordsTool];
+  const tools = [smartWebSearchTool, queryRecordsTool];
   return createAgent({ llm, tools });
 }
