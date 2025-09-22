@@ -1,7 +1,12 @@
 import { Body, Controller, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsObject, IsOptional, IsString, ValidateNested } from "class-validator";
+import {
+  IsObject,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from "class-validator";
 import { McpService } from "./mcp.service.js";
 
 class McpListRequestDto {

@@ -1,5 +1,9 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { type McpToolCallResult, ReflectiveMcpTool, toolField } from "./baseTool.js";
+import {
+  type McpToolCallResult,
+  ReflectiveMcpTool,
+  toolField,
+} from "./baseTool.js";
 
 interface MockRow {
   id: string;
@@ -28,7 +32,8 @@ class SampleDatabaseInput {
 @Injectable()
 export class SampleDatabaseTool extends ReflectiveMcpTool<SampleDatabaseInput> {
   readonly name = "mock_db_lookup";
-  readonly description = "Lookup a mock record by id and return summary details.";
+  readonly description =
+    "Lookup a mock record by id and return summary details.";
 
   protected readonly inputConstructor = SampleDatabaseInput;
 
