@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { createAgent } from "langchain";
 import { ChatOpenAI } from "@langchain/openai";

@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "dev": "node --watch --loader=@swc-node/register/esm src/main.ts",
     "build": "swc src -d dist --source-maps",
     "start": "node dist/main.js",
     "lint": "eslint .",
@@ -21,10 +21,12 @@
     "@nestjs/swagger": "^7.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
+    "dotenv": "^17.2.2",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
   },
   "devDependencies": {
+    "@swc-node/register": "^1.11.1",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0"
   }

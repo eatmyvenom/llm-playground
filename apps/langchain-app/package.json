@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node --watch --loader=@swc-node/register/esm src/index.ts",
     "build": "swc src -d dist --source-maps",
     "start": "node dist/index.js",
     "lint": "eslint .",
@@ -19,10 +19,12 @@
     "@langchain/core": "npm:@langchain/core@next",
     "@langchain/langgraph": "1.0.0-alpha.3",
     "@langchain/openai": "npm:@langchain/openai@next",
+    "dotenv": "^17.2.2",
     "langchain": "npm:langchain@next",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@swc-node/register": "^1.11.1",
     "@types/node": "^20.11.0"
   }
 }
