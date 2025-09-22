@@ -1,9 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import {
-  ReflectiveMcpTool,
-  toolField,
-  type McpToolCallResult,
-} from "./baseTool.js";
+import { ReflectiveMcpTool, toolField, type McpToolCallResult } from "./baseTool.js";
 
 type SearchEngineId = "brave" | "tavily" | "exa" | "firecrawl";
 
@@ -49,8 +45,7 @@ class SmartWebSearchInput {
   query!: string;
 
   @toolField.boolean({
-    description:
-      "Allow heuristic splitting of complex queries into sub-queries",
+    description: "Allow heuristic splitting of complex queries into sub-queries",
     default: true,
     required: false,
   })
@@ -58,8 +53,7 @@ class SmartWebSearchInput {
 
   @toolField.string({
     enum: ["brave", "tavily", "exa", "firecrawl"],
-    description:
-      "Preferred search engine. Falls back to first configured engine if unavailable",
+    description: "Preferred search engine. Falls back to first configured engine if unavailable",
     required: false,
   })
   engine?: string;
@@ -86,13 +80,9 @@ interface SearchToolConfig {
 }
 
 @Injectable()
-export class SmartWebSearchTool extends ReflectiveMcpTool<
-  SmartWebSearchInput,
-  SearchToolInput
-> {
+export class SmartWebSearchTool extends ReflectiveMcpTool<SmartWebSearchInput, SearchToolInput> {
   readonly name = "web_search" as const;
-  readonly description =
-    "Run a web search and summarize the top results using Brave, Tavily, Exa, or Firecrawl.";
+  readonly description = "Run a web search and summarize the top results using Brave, Tavily, Exa, or Firecrawl.";
 
   private readonly logger = new Logger(SmartWebSearchTool.name);
   private readonly config: SearchToolConfig;
@@ -128,24 +118,15 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
   async call(args: Record<string, unknown>): Promise<McpToolCallResult> {
     const input = this.parseArgs(args);
 
-    const componentQueries = await this.buildComponentQueries(
-      input.query,
-      input.allowSplit,
-    );
+    const componentQueries = await this.buildComponentQueries(input.query, input.allowSplit);
 
     const runs: Array<SearchRun> = [];
     for (const component of componentQueries) {
       try {
-        const results = await this.runSearch(
-          input.engine,
-          component.query,
-          input.maxResults,
-        );
+        const results = await this.runSearch(input.engine, component.query, input.maxResults);
         runs.push({ component, results });
       } catch (error) {
-        this.logger.error(
-          `Search failed for "${component.query}" using ${input.engine}: ${String(error)}`,
-        );
+        this.logger.error(`Search failed for "${component.query}" using ${input.engine}: ${String(error)}`);
         runs.push({ component, results: [] });
       }
     }
@@ -167,16 +148,9 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
 
   private resolveConfig(): SearchToolConfig {
     const env = process.env;
-    const defaultEngine = this.parseEngine(
-      env.SMART_SEARCH_ENGINE ?? env.WEB_SEARCH_ENGINE ?? "brave",
-    );
+    const defaultEngine = this.parseEngine(env.SMART_SEARCH_ENGINE ?? env.WEB_SEARCH_ENGINE ?? "brave");
 
-    const topResults = this.parseIntBounded(
-      env.SMART_SEARCH_TOP_N ?? env.SEARCH_TOP_N,
-      3,
-      1,
-      8,
-    );
+    const topResults = this.parseIntBounded(env.SMART_SEARCH_TOP_N ?? env.SEARCH_TOP_N, 3, 1, 8);
 
     const maxComponentQueries = this.parseIntBounded(
       env.SMART_SEARCH_MAX_COMPONENTS ?? env.SEARCH_MAX_COMPONENTS,
@@ -194,9 +168,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
       tavilyApiKey: env.TAVILY_API_KEY,
       exaApiKey: env.EXA_API_KEY,
       firecrawlApiKey: env.FIRECRAWL_API_KEY,
-      firecrawlBaseUrl:
-        env.FIRECRAWL_BASE_URL?.replace(/\/$/, "") ??
-        "https://api.firecrawl.dev",
+      firecrawlBaseUrl: env.FIRECRAWL_BASE_URL?.replace(/\/$/, "") ?? "https://api.firecrawl.dev",
     };
   }
 
@@ -226,15 +198,11 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
 
     const fallback = this.availableEngines[0];
     if (fallback) {
-      this.logger.warn(
-        `Engine ${preferred} not configured. Falling back to ${fallback}.`,
-      );
+      this.logger.warn(`Engine ${preferred} not configured. Falling back to ${fallback}.`);
       return fallback;
     }
 
-    throw new BadRequestException(
-      "No search engines are configured. Provide at least one API key.",
-    );
+    throw new BadRequestException("No search engines are configured. Provide at least one API key.");
   }
 
   private resolveMaxResults(candidate: number | undefined): number {
@@ -246,22 +214,13 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
       return "brave";
     }
     const normalized = candidate.trim().toLowerCase();
-    if (
-      normalized === "tavily" ||
-      normalized === "exa" ||
-      normalized === "firecrawl"
-    ) {
+    if (normalized === "tavily" || normalized === "exa" || normalized === "firecrawl") {
       return normalized;
     }
     return "brave";
   }
 
-  private parseIntBounded(
-    value: unknown,
-    fallback: number,
-    min: number,
-    max: number,
-  ): number {
+  private parseIntBounded(value: unknown, fallback: number, min: number, max: number): number {
     const parsed = Number.parseInt(String(value ?? fallback), 10);
     if (Number.isNaN(parsed)) {
       return fallback;
@@ -284,10 +243,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     }
   }
 
-  private async buildComponentQueries(
-    query: string,
-    allowSplit: boolean,
-  ): Promise<Array<ComponentQuery>> {
+  private async buildComponentQueries(query: string, allowSplit: boolean): Promise<Array<ComponentQuery>> {
     const components: Array<ComponentQuery> = [
       {
         query,
@@ -305,10 +261,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
       if (components.length >= this.config.maxComponentQueries) {
         break;
       }
-      const duplicate = components.find(
-        (component) =>
-          component.query.toLowerCase() === item.query.toLowerCase(),
-      );
+      const duplicate = components.find((component) => component.query.toLowerCase() === item.query.toLowerCase());
       if (!duplicate) {
         components.push({
           query: item.query,
@@ -321,9 +274,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     return components;
   }
 
-  private heuristicComponentQueries(
-    query: string,
-  ): Array<Omit<ComponentQuery, "priority">> {
+  private heuristicComponentQueries(query: string): Array<Omit<ComponentQuery, "priority">> {
     const normalized = query.toLowerCase();
     const results: Array<Omit<ComponentQuery, "priority">> = [];
 
@@ -361,11 +312,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     return results;
   }
 
-  private async runSearch(
-    engine: SearchEngineId,
-    query: string,
-    maxResults: number,
-  ): Promise<Array<SearchResultItem>> {
+  private async runSearch(engine: SearchEngineId, query: string, maxResults: number): Promise<Array<SearchResultItem>> {
     switch (engine) {
       case "brave":
         return this.searchBrave(query, maxResults);
@@ -380,10 +327,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     }
   }
 
-  private async searchBrave(
-    query: string,
-    maxResults: number,
-  ): Promise<Array<SearchResultItem>> {
+  private async searchBrave(query: string, maxResults: number): Promise<Array<SearchResultItem>> {
     if (!this.config.braveApiKey) {
       throw new BadRequestException("Brave Search API key is not configured");
     }
@@ -394,15 +338,12 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
       country: this.config.searchRegion,
     });
 
-    const response = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?${params.toString()}`,
-      {
-        headers: {
-          Accept: "application/json",
-          "X-Subscription-Token": this.config.braveApiKey,
-        },
+    const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+        "X-Subscription-Token": this.config.braveApiKey,
       },
-    );
+    });
 
     if (!response.ok) {
       throw new Error(`Brave search failed with status ${response.status}`);
@@ -421,10 +362,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     }));
   }
 
-  private async searchTavily(
-    query: string,
-    maxResults: number,
-  ): Promise<Array<SearchResultItem>> {
+  private async searchTavily(query: string, maxResults: number): Promise<Array<SearchResultItem>> {
     if (!this.config.tavilyApiKey) {
       throw new BadRequestException("Tavily API key is not configured");
     }
@@ -456,18 +394,12 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
       title: this.safeString(item["title"], "No title"),
       url: this.safeString(item["url"], ""),
       description: this.safeString(item["content"], ""),
-      rawContent:
-        typeof item["raw_content"] === "string"
-          ? item["raw_content"]
-          : undefined,
+      rawContent: typeof item["raw_content"] === "string" ? item["raw_content"] : undefined,
       position: index + 1,
     }));
   }
 
-  private async searchExa(
-    query: string,
-    maxResults: number,
-  ): Promise<Array<SearchResultItem>> {
+  private async searchExa(query: string, maxResults: number): Promise<Array<SearchResultItem>> {
     if (!this.config.exaApiKey) {
       throw new BadRequestException("Exa API key is not configured");
     }
@@ -503,18 +435,12 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
       url: this.safeString(item["url"], ""),
       description: this.safeString(item["description"], ""),
       rawContent: typeof item["text"] === "string" ? item["text"] : undefined,
-      publishedDate:
-        typeof item["publishedDate"] === "string"
-          ? item["publishedDate"]
-          : undefined,
+      publishedDate: typeof item["publishedDate"] === "string" ? item["publishedDate"] : undefined,
       position: index + 1,
     }));
   }
 
-  private async searchFirecrawl(
-    query: string,
-    maxResults: number,
-  ): Promise<Array<SearchResultItem>> {
+  private async searchFirecrawl(query: string, maxResults: number): Promise<Array<SearchResultItem>> {
     if (!this.config.firecrawlApiKey) {
       throw new BadRequestException("Firecrawl API key is not configured");
     }
@@ -536,11 +462,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     }
 
     const data = (await response.json()) as Record<string, unknown>;
-    const candidateKeys: Array<"results" | "data" | "items"> = [
-      "results",
-      "data",
-      "items",
-    ];
+    const candidateKeys: Array<"results" | "data" | "items"> = ["results", "data", "items"];
 
     let rawResults: Array<Record<string, unknown>> = [];
     for (const key of candidateKeys) {
@@ -552,21 +474,11 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     }
 
     return rawResults.slice(0, maxResults).map((item, index) => ({
-      title: this.safeString(
-        item["title"] ?? item["name"] ?? item["source"],
-        "No title",
-      ),
+      title: this.safeString(item["title"] ?? item["name"] ?? item["source"], "No title"),
       url: this.safeString(item["url"] ?? item["link"], ""),
-      description: this.safeString(
-        item["description"] ?? item["content"] ?? item["snippet"],
-        "",
-      ),
-      rawContent:
-        typeof item["rawContent"] === "string" ? item["rawContent"] : undefined,
-      publishedDate:
-        typeof item["publishedDate"] === "string"
-          ? item["publishedDate"]
-          : undefined,
+      description: this.safeString(item["description"] ?? item["content"] ?? item["snippet"], ""),
+      rawContent: typeof item["rawContent"] === "string" ? item["rawContent"] : undefined,
+      publishedDate: typeof item["publishedDate"] === "string" ? item["publishedDate"] : undefined,
       position: index + 1,
     }));
   }
@@ -579,9 +491,7 @@ export class SmartWebSearchTool extends ReflectiveMcpTool<
     const lines: Array<string> = [];
     for (const run of runs) {
       const resultCount = run.results.length;
-      lines.push(
-        `Query "${run.component.query}" → ${resultCount} result${resultCount === 1 ? "" : "s"}`,
-      );
+      lines.push(`Query "${run.component.query}" → ${resultCount} result${resultCount === 1 ? "" : "s"}`);
       for (const result of run.results.slice(0, 3)) {
         lines.push(`  - ${result.title} (${result.url})`);
       }

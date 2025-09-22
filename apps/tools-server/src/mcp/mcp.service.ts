@@ -20,16 +20,12 @@ export class McpService {
     private readonly sampleTool: SampleDatabaseTool,
     private readonly smartSearchTool: SmartWebSearchTool,
   ) {
-    this.toolRegistry = new Map(
-      [sampleTool, smartSearchTool].map((tool) => [tool.name, tool]),
-    );
+    this.toolRegistry = new Map([sampleTool, smartSearchTool].map((tool) => [tool.name, tool]));
   }
 
   listTools(): McpListResponse {
     return {
-      tools: Array.from(this.toolRegistry.values()).map((tool) =>
-        tool.listDefinition(),
-      ),
+      tools: Array.from(this.toolRegistry.values()).map((tool) => tool.listDefinition()),
     };
   }
 

@@ -47,21 +47,9 @@ const smartWebSearchTool = new DynamicStructuredTool({
     "Perform a multi-source web search via the tools server. Returns structured JSON with query breakdown and top results.",
   schema: z.object({
     query: z.string().min(3).max(512).describe("Search query to execute"),
-    allowSplit: z
-      .boolean()
-      .optional()
-      .describe("Allow heuristic query splitting (default true)"),
-    engine: z
-      .enum(["brave", "tavily", "exa", "firecrawl"])
-      .optional()
-      .describe("Preferred engine override"),
-    maxResults: z
-      .number()
-      .int()
-      .min(1)
-      .max(10)
-      .optional()
-      .describe("Limit results per query"),
+    allowSplit: z.boolean().optional().describe("Allow heuristic query splitting (default true)"),
+    engine: z.enum(["brave", "tavily", "exa", "firecrawl"]).optional().describe("Preferred engine override"),
+    maxResults: z.number().int().min(1).max(10).optional().describe("Limit results per query"),
   }),
   func: async (input) => {
     const response = await fetch(`${toolsServerUrl}/mcp/tools/call`, {
@@ -76,9 +64,7 @@ const smartWebSearchTool = new DynamicStructuredTool({
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
-        `tools-server error (${response.status}): ${errorText || response.statusText}`,
-      );
+      throw new Error(`tools-server error (${response.status}): ${errorText || response.statusText}`);
     }
 
     const payload = (await response.json()) as {
