@@ -6,6 +6,7 @@
     "rootDir": "src",
     "moduleResolution": "NodeNext",
     "module": "NodeNext",
+    "experimentalDecorators": true,
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },

@@ -8,13 +8,30 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "env": ["OPENAI_API_KEY", "PORT", "TOOLS_SERVER_URL"]
+      "env": [
+        "OPENAI_API_KEY",
+        "PORT",
+        "TOOLS_SERVER_URL",
+        "PLANNING_AGENT_PLANNER_MODEL",
+        "PLANNING_AGENT_EXECUTOR_MODEL",
+        "PLANNING_AGENT_RESPONDER_MODEL"
+      ]
     },
     "lint": {
-      "outputs": []
+      "outputs": [],
+      "env": [
+        "PLANNING_AGENT_PLANNER_MODEL",
+        "PLANNING_AGENT_EXECUTOR_MODEL",
+        "PLANNING_AGENT_RESPONDER_MODEL"
+      ]
     },
     "type-check": {
-      "outputs": []
+      "outputs": [],
+      "env": [
+        "PLANNING_AGENT_PLANNER_MODEL",
+        "PLANNING_AGENT_EXECUTOR_MODEL",
+        "PLANNING_AGENT_RESPONDER_MODEL"
+      ]
     }
   }
 }
