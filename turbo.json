@@ -10,6 +10,7 @@
       "persistent": true,
       "env": [
         "OPENAI_API_KEY",
+        "OPENAI_AGENT_PORT",
         "PORT",
         "TOOLS_SERVER_URL",
         "PLANNING_AGENT_PLANNER_MODEL",
@@ -22,7 +23,8 @@
       "env": [
         "PLANNING_AGENT_PLANNER_MODEL",
         "PLANNING_AGENT_EXECUTOR_MODEL",
-        "PLANNING_AGENT_RESPONDER_MODEL"
+        "PLANNING_AGENT_RESPONDER_MODEL",
+        "OPENAI_AGENT_PORT"
       ]
     },
     "type-check": {
@@ -30,7 +32,8 @@
       "env": [
         "PLANNING_AGENT_PLANNER_MODEL",
         "PLANNING_AGENT_EXECUTOR_MODEL",
-        "PLANNING_AGENT_RESPONDER_MODEL"
+        "PLANNING_AGENT_RESPONDER_MODEL",
+        "OPENAI_AGENT_PORT"
       ]
     }
   }

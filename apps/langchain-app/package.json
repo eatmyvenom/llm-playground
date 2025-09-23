@@ -8,8 +8,10 @@
   },
   "scripts": {
     "dev": "node --watch --loader=@swc-node/register/esm src/index.ts",
+    "openai": "node --watch --loader=@swc-node/register/esm src/openaiServer.ts",
     "build": "swc src -d dist --source-maps",
     "start": "node dist/index.js",
+    "start:openai": "node dist/openaiServer.js",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist"
@@ -20,6 +22,7 @@
     "@langchain/langgraph": "1.0.0-alpha.3",
     "@langchain/openai": "npm:@langchain/openai@next",
     "dotenv": "^17.2.2",
+    "fastify": "^5.6.1",
     "langchain": "npm:langchain@next",
     "zod": "^3.23.0"
   },

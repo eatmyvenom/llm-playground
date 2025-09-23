@@ -49,6 +49,11 @@ This repository hosts a LangChain-based agent application and a NestJS tools ser
   - `pnpm --filter tools-server run dev` exposes Swagger at `http://localhost:4000/api` and MCP endpoints under `/mcp`.
 - Keep generated `dist/` folders out of version control; builds should be reproducible.
 
+## Documentation Maintenance
+- When LLM-driven changes affect how to install, run, or operate the repo, update `docs/runbook.md` alongside this guide.
+- Capture a short note in this section summarizing the change so the next agent understands which docs were touched and why.
+- Latest update: Added env bootstrap modules so packages load the root `.env` automatically; runbook documents the override behavior.
+
 ## Operational Notes
 - Logging is console-based; avoid leaving noisy debug output.
 - When adjusting build pipelines, edit `turbo.json` so dependent tasks stay consistent.
