@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
+import { createPreview, createToolLogger } from "./toolLogging.js";
 
 type ToolsCallPayload = {
   jsonrpc: "2.0";
@@ -13,6 +15,7 @@ type ToolsCallResponse = {
 
 export function createWebSearchTool(baseUrl: string): DynamicStructuredTool {
   const toolsEndpoint = new URL("/mcp/tools/call", baseUrl).toString();
+  const toolLogger = createToolLogger("web_search");
 
   return new DynamicStructuredTool({
     name: "web_search",
@@ -27,31 +30,59 @@ export function createWebSearchTool(baseUrl: string): DynamicStructuredTool {
       maxResults: z.number().int().min(1).max(10).optional().describe("Limit results per query"),
     }),
     func: async (input) => {
-      const payload: ToolsCallPayload = {
-        jsonrpc: "2.0",
-        method: "tools.call",
-        params: { name: "web_search", arguments: input },
-      };
-
-      const response = await fetch(toolsEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const invocationId = randomUUID();
+      const startedAt = Date.now();
+      toolLogger.info("Invocation started", {
+        invocationId,
+        queryPreview: createPreview(input.query, 120),
+        engine: input.engine ?? "auto",
+        allowSplit: input.allowSplit,
+        maxResults: input.maxResults,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`tools-server error (${response.status}): ${errorText || response.statusText}`);
+      try {
+        const payload: ToolsCallPayload = {
+          jsonrpc: "2.0",
+          method: "tools.call",
+          params: { name: "web_search", arguments: input },
+        };
+
+        const response = await fetch(toolsEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`tools-server error (${response.status}): ${errorText || response.statusText}`);
+        }
+
+        const result = (await response.json()) as ToolsCallResponse;
+        const content = result.result?.content;
+
+        if (content === undefined || content === null) {
+          throw new Error("tools-server returned an empty result for web_search");
+        }
+
+        const serialized = typeof content === "string" ? content : JSON.stringify(content);
+        toolLogger.info("Invocation completed", {
+          invocationId,
+          durationMs: Date.now() - startedAt,
+          responsePreview: createPreview(serialized, 200),
+        });
+        return serialized;
+      } catch (error) {
+        toolLogger.error(
+          "Invocation failed",
+          {
+            invocationId,
+            durationMs: Date.now() - startedAt,
+          },
+          error,
+        );
+        throw error;
       }
-
-      const result = (await response.json()) as ToolsCallResponse;
-      const content = result.result?.content;
-
-      if (content === undefined || content === null) {
-        throw new Error("tools-server returned an empty result for web_search");
-      }
-
-      return typeof content === "string" ? content : JSON.stringify(content);
     },
   });
 }

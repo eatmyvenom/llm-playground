@@ -1,6 +1,7 @@
 import "../env.js";
 import { ChatOpenAI } from "@langchain/openai";
 import { createAgent } from "langchain";
+import { logger } from "../logger.js";
 import { createWebSearchTool } from "../tools/webSearchTool.js";
 
 const DEFAULT_SYSTEM_PROMPT =
@@ -20,6 +21,12 @@ export async function buildReactAgent(options: BuildReactAgentOptions = {}) {
 
   const toolsServerUrl = options.toolsServerUrl ?? process.env.TOOLS_SERVER_URL ?? "http://localhost:4000";
   const smartWebSearchTool = createWebSearchTool(toolsServerUrl);
+  const tools = [smartWebSearchTool];
+
+  logger.info("ReAct agent registered tools", {
+    tools: tools.map((tool) => tool.name),
+    toolsServerUrl,
+  });
 
   const llm = new ChatOpenAI({
     model: "gpt-5-mini",
@@ -30,7 +37,7 @@ export async function buildReactAgent(options: BuildReactAgentOptions = {}) {
 
   return createAgent({
     llm,
-    tools: [smartWebSearchTool],
+    tools,
     prompt: systemPrompt,
     name: "web-search-react-agent",
     description: "Performs multi-source web research via the MCP tools server.",

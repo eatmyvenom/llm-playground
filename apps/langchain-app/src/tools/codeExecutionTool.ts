@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
+import { createPreview, createToolLogger } from "./toolLogging.js";
 
 export interface CodeExecutionHandlerInput {
   language: string;
@@ -11,6 +13,8 @@ export interface CodeExecutionHandlerInput {
 export type CodeExecutionHandler = (input: CodeExecutionHandlerInput) => Promise<string> | string;
 
 export function createCodeExecutionTool(handler?: CodeExecutionHandler): DynamicStructuredTool {
+  const toolLogger = createToolLogger("code_execution");
+
   return new DynamicStructuredTool({
     name: "code_execution",
     description: [
@@ -32,21 +36,60 @@ export function createCodeExecutionTool(handler?: CodeExecutionHandler): Dynamic
         .describe("What the code is expected to produce. Helps validate execution results."),
     }),
     func: async (input) => {
-      if (!handler) {
-        return [
-          "Code execution environment is not configured yet.",
-          "Provide the snippet to a human operator or run it locally as needed.",
-          `Language: ${input.language}`,
-          `Snippet:\n${input.snippet}`,
-          input.context ? `Context: ${input.context}` : null,
-          input.expectedOutput ? `Expected output: ${input.expectedOutput}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n");
-      }
+      const invocationId = randomUUID();
+      const startedAt = Date.now();
+      toolLogger.info("Invocation started", {
+        invocationId,
+        language: input.language,
+        snippetPreview: createPreview(input.snippet, 120),
+        hasHandler: Boolean(handler),
+      });
 
-      const result = await handler(input);
-      return result;
+      try {
+        if (!handler) {
+          const fallback = [
+            "Code execution environment is not configured yet.",
+            "Provide the snippet to a human operator or run it locally as needed.",
+            `Language: ${input.language}`,
+            `Snippet:\n${input.snippet}`,
+            input.context ? `Context: ${input.context}` : null,
+            input.expectedOutput ? `Expected output: ${input.expectedOutput}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const durationMs = Date.now() - startedAt;
+          toolLogger.warn("No handler configured", {
+            invocationId,
+            durationMs,
+          });
+          toolLogger.info("Invocation completed", {
+            invocationId,
+            durationMs,
+            responsePreview: createPreview(fallback, 200),
+          });
+          return fallback;
+        }
+
+        const result = await handler(input);
+        const output = typeof result === "string" ? result : String(result);
+        toolLogger.info("Invocation completed", {
+          invocationId,
+          durationMs: Date.now() - startedAt,
+          responsePreview: createPreview(output, 200),
+        });
+        return output;
+      } catch (error) {
+        toolLogger.error(
+          "Invocation failed",
+          {
+            invocationId,
+            durationMs: Date.now() - startedAt,
+          },
+          error,
+        );
+        throw error;
+      }
     },
   });
 }
