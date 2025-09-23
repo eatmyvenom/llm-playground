@@ -1,25 +1,40 @@
-import "dotenv/config";
+import "../env.js";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import type { AIMessageChunk } from "@langchain/core/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import type { DynamicStructuredTool } from "@langchain/core/tools";
+import { createWebSearchTool } from "../tools/webSearchTool.js";
+import { createCodeExecutionTool, type CodeExecutionHandler } from "../tools/codeExecutionTool.js";
 import { createSchema, ZodField, z } from "./zodDecorators.js";
 
 type PlanStep = z.infer<typeof planStepSchema>;
 type Plan = z.infer<typeof planSchema>;
 type ExecutionDecision = z.infer<typeof executionDecisionSchema>;
+type ToolRequest = z.infer<typeof toolRequestSchema>;
+type ToolExecutionRecord = {
+  toolId: string;
+  input: Record<string, unknown>;
+  output: string;
+  success: boolean;
+  error?: string;
+  rationale?: string;
+};
 type ExecutionLogEntry = {
   step: PlanStep;
   status: ExecutionDecision["status"];
   output: string;
   notes?: string;
   planChanges?: ExecutionDecision["planAdjustments"];
+  toolResults?: Array<ToolExecutionRecord>;
+};
+type StructuredExecutor = {
+  invoke: (input: string) => Promise<unknown>;
 };
 
 export type OpenAIModelSpecifier = {
   provider: "openai";
   model: string;
-  temperature?: number;
   apiKey?: string;
 };
 
@@ -33,12 +48,18 @@ export interface BuildPlanningAgentOptions {
   executorModel?: ModelSpec;
   /** Optional default responder model specification. */
   responderModel?: ModelSpec;
+  /** Optional base URL for the MCP tools server. Defaults to TOOLS_SERVER_URL env or http://localhost:4000. */
+  toolsServerUrl?: string;
+  /** Optional handler used when the code_execution tool is invoked. */
+  codeExecutionHandler?: CodeExecutionHandler;
 }
 
 export interface PlanningAgentRunOverrides {
   plannerModel?: ModelSpec;
   executorModel?: ModelSpec;
   responderModel?: ModelSpec;
+  toolsServerUrl?: string;
+  codeExecutionHandler?: CodeExecutionHandler;
 }
 
 export interface PlanningAgent {
@@ -105,6 +126,21 @@ const planAdjustmentsSchema = createSchema(ExecutionPlanAdjustmentsModel, {
   description: "Describe any changes to the plan discovered during execution.",
 });
 
+class ToolRequestModel {
+  @ZodField(() => z.string().min(1).describe("Identifier of the tool to call (e.g. web_search)."))
+  toolId!: string;
+
+  @ZodField(() => z.record(z.unknown()).describe("Arguments to pass to the tool as a JSON object."))
+  input!: Record<string, unknown>;
+
+  @ZodField(() => z.string().describe("Why this tool request is needed.").optional())
+  rationale?: string;
+}
+
+const toolRequestSchema = createSchema(ToolRequestModel, {
+  description: "Declare external tool invocations required before finalizing the step.",
+});
+
 class ExecutionDecisionModel {
   @ZodField(() => z.string().min(1).describe("Identifier of the step being executed."))
   stepId!: string;
@@ -126,6 +162,17 @@ class ExecutionDecisionModel {
     planAdjustmentsSchema.optional().describe("Describe any changes to the plan discovered during execution."),
   )
   planAdjustments?: z.infer<typeof planAdjustmentsSchema>;
+
+  @ZodField(() =>
+    z
+      .array(toolRequestSchema)
+      .min(1)
+      .describe(
+        "List of tools that must be executed before the step can be completed. Leave empty when no tools are required.",
+      )
+      .optional(),
+  )
+  toolRequests?: Array<ToolRequestModel>;
 }
 
 const executionDecisionSchema = createSchema(ExecutionDecisionModel);
@@ -133,13 +180,13 @@ const executionDecisionSchema = createSchema(ExecutionDecisionModel);
 const defaultPlannerModelName = process.env.PLANNING_AGENT_PLANNER_MODEL ?? "gpt-4.1";
 const defaultExecutorModelName = process.env.PLANNING_AGENT_EXECUTOR_MODEL ?? "gpt-4.1-mini";
 const defaultResponderModelName = process.env.PLANNING_AGENT_RESPONDER_MODEL ?? "gpt-4.1-mini";
+const MAX_EXECUTION_TOOL_ITERATIONS = 3;
 
 export function buildPlanningAgent(options?: BuildPlanningAgentOptions): PlanningAgent {
   const defaultPlannerFactory = normalizeModelFactory(options?.plannerModel, () =>
     createOpenAIModel({
       provider: "openai",
       model: defaultPlannerModelName,
-      temperature: 0.1,
     }),
   );
 
@@ -147,7 +194,6 @@ export function buildPlanningAgent(options?: BuildPlanningAgentOptions): Plannin
     createOpenAIModel({
       provider: "openai",
       model: defaultExecutorModelName,
-      temperature: 0,
     }),
   );
 
@@ -155,7 +201,6 @@ export function buildPlanningAgent(options?: BuildPlanningAgentOptions): Plannin
     createOpenAIModel({
       provider: "openai",
       model: defaultResponderModelName,
-      temperature: 0.2,
     }),
   );
 
@@ -168,6 +213,12 @@ export function buildPlanningAgent(options?: BuildPlanningAgentOptions): Plannin
       const planner = normalizeModelFactory(overrides?.plannerModel, defaultPlannerFactory)();
       const executor = normalizeModelFactory(overrides?.executorModel, defaultExecutorFactory)();
       const responder = normalizeModelFactory(overrides?.responderModel, defaultResponderFactory)();
+
+      const toolsServerUrl =
+        overrides?.toolsServerUrl ?? options?.toolsServerUrl ?? process.env.TOOLS_SERVER_URL ?? "http://localhost:4000";
+      const codeExecutionHandler = overrides?.codeExecutionHandler ?? options?.codeExecutionHandler;
+      const planningTools = createPlanningTools({ toolsServerUrl, codeExecutionHandler });
+      const toolRegistry = new Map(planningTools.map((tool) => [tool.name, tool]));
 
       const structuredPlanner = planner.withStructuredOutput(planSchema, {
         name: "long_horizon_plan",
@@ -190,14 +241,15 @@ export function buildPlanningAgent(options?: BuildPlanningAgentOptions): Plannin
 
       for (let index = 0; index < plan.steps.length; index += 1) {
         const currentStep = plan.steps[index];
-        const executionPrompt = buildExecutionPrompt({
+        const { decision, toolHistory } = await executePlanStep({
+          executor: structuredExecutor,
           task: input,
           plan,
           step: currentStep,
           priorLog: executionLog,
+          tools: planningTools,
+          toolRegistry,
         });
-
-        const decision = (await structuredExecutor.invoke(executionPrompt)) as ExecutionDecision;
 
         applyPlanAdjustments(plan, decision.planAdjustments, currentStep.id);
 
@@ -207,12 +259,14 @@ export function buildPlanningAgent(options?: BuildPlanningAgentOptions): Plannin
           output: decision.output,
           notes: decision.notes,
           planChanges: decision.planAdjustments,
+          toolResults: toolHistory.length ? toolHistory : undefined,
         });
 
         yield formatExecutionThought({
           index,
           decision,
           currentStep,
+          toolsUsed: toolHistory,
         });
 
         if (decision.status === "blocked") {
@@ -294,8 +348,141 @@ function createOpenAIModel(spec: OpenAIModelSpecifier): BaseChatModel {
   return new ChatOpenAI({
     apiKey,
     model: spec.model,
-    temperature: spec.temperature ?? 0,
   });
+}
+
+function createPlanningTools(args: {
+  toolsServerUrl: string;
+  codeExecutionHandler?: CodeExecutionHandler;
+}): Array<DynamicStructuredTool> {
+  const tools: Array<DynamicStructuredTool> = [];
+  tools.push(createWebSearchTool(args.toolsServerUrl));
+  tools.push(createCodeExecutionTool(args.codeExecutionHandler));
+  return tools;
+}
+
+async function executePlanStep(args: {
+  executor: StructuredExecutor;
+  task: string;
+  plan: Plan;
+  step: PlanStep;
+  priorLog: Array<ExecutionLogEntry>;
+  tools: Array<DynamicStructuredTool>;
+  toolRegistry: Map<string, DynamicStructuredTool>;
+}): Promise<{ decision: ExecutionDecision; toolHistory: Array<ToolExecutionRecord> }> {
+  const { executor, task, plan, step, priorLog, tools, toolRegistry } = args;
+  const toolHistory: Array<ToolExecutionRecord> = [];
+  let finalDecision: ExecutionDecision | undefined;
+  let lastDecision: ExecutionDecision | undefined;
+  let toolLoops = 0;
+
+  while (toolLoops <= MAX_EXECUTION_TOOL_ITERATIONS) {
+    const executionPrompt = buildExecutionPrompt({
+      task,
+      plan,
+      step,
+      priorLog,
+      tools,
+      toolHistory,
+    });
+
+    const candidateDecision = (await executor.invoke(executionPrompt)) as ExecutionDecision;
+    lastDecision = candidateDecision;
+    const requests = candidateDecision.toolRequests ?? [];
+
+    if (!requests.length) {
+      finalDecision = candidateDecision;
+      break;
+    }
+
+    if (toolLoops >= MAX_EXECUTION_TOOL_ITERATIONS) {
+      finalDecision = {
+        ...candidateDecision,
+        notes: appendNote(
+          candidateDecision.notes,
+          "Tool request limit reached before completion. Summarize remaining follow-ups explicitly.",
+        ),
+        toolRequests: undefined,
+      };
+      break;
+    }
+
+    const results = await executeToolRequests(requests, toolRegistry);
+    toolHistory.push(...results);
+    toolLoops += 1;
+  }
+
+  if (!finalDecision) {
+    if (!lastDecision) {
+      throw new Error(`Executor failed to produce a decision for step ${step.id}.`);
+    }
+    finalDecision = lastDecision;
+  }
+
+  if (finalDecision.toolRequests) {
+    // Ensure downstream consumers do not attempt to re-run the same tool requests.
+    finalDecision = { ...finalDecision, toolRequests: undefined };
+  }
+
+  return { decision: finalDecision, toolHistory };
+}
+
+async function executeToolRequests(
+  requests: Array<ToolRequest>,
+  toolRegistry: Map<string, DynamicStructuredTool>,
+): Promise<Array<ToolExecutionRecord>> {
+  const results: Array<ToolExecutionRecord> = [];
+
+  for (const request of requests) {
+    const baseRecord: ToolExecutionRecord = {
+      toolId: request.toolId,
+      input: request.input,
+      output: "",
+      success: false,
+      rationale: request.rationale,
+    };
+
+    const tool = toolRegistry.get(request.toolId);
+    if (!tool) {
+      const message = `Requested tool '${request.toolId}' is not registered.`;
+      results.push({ ...baseRecord, output: message, error: message });
+      continue;
+    }
+
+    try {
+      const invocation = await tool.invoke(request.input as never);
+      const output = typeof invocation === "string" ? invocation : JSON.stringify(invocation);
+      results.push({ ...baseRecord, output, success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown tool execution error.";
+      results.push({ ...baseRecord, output: message, error: message });
+    }
+  }
+
+  return results;
+}
+
+function appendNote(existing: string | undefined, addition: string): string {
+  return existing ? `${existing} ${addition}` : addition;
+}
+
+function describeToolExecutions(executions: Array<ToolExecutionRecord>): string {
+  return executions
+    .map((record) => {
+      const status = record.success ? "success" : "error";
+      const rationale = record.rationale ? `Rationale: ${record.rationale}. ` : "";
+      const inputPreview = JSON.stringify(record.input);
+      const outputPreview = truncate(record.output, 400);
+      return `${record.toolId} => ${status}. ${rationale}Input: ${inputPreview}. Output: ${outputPreview}`;
+    })
+    .join("\n");
+}
+
+function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 function formatPlan(plan: Plan): string {
@@ -318,8 +505,10 @@ function buildExecutionPrompt(args: {
   plan: Plan;
   step: PlanStep;
   priorLog: Array<ExecutionLogEntry>;
+  tools: Array<DynamicStructuredTool>;
+  toolHistory: Array<ToolExecutionRecord>;
 }): string {
-  const { task, plan, step, priorLog } = args;
+  const { task, plan, step, priorLog, tools, toolHistory } = args;
   const completed = priorLog
     .map(
       (entry) =>
@@ -329,11 +518,28 @@ function buildExecutionPrompt(args: {
     )
     .join("\n");
 
+  const toolSummaries = tools.length
+    ? tools.map((tool) => `- ${tool.name}: ${tool.description ?? "No description provided."}`).join("\n")
+    : "- No external tools are currently registered.";
+
+  const toolGuidance = [
+    `If you need a tool, set status to 'blocked' and populate toolRequests with entries like { "toolId": "web_search", "input": { ... }, "rationale": "why this helps" }.`,
+    "After tool results are provided, respond again with toolRequests omitted and a final status (completed/skipped/blocked).",
+    `You may request tools up to ${MAX_EXECUTION_TOOL_ITERATIONS} time(s) per step before finalizing.`,
+  ].join(" \n");
+
+  const priorToolRuns = toolHistory.length
+    ? `Tool results available:\n${describeToolExecutions(toolHistory)}`
+    : "No tool results have been provided yet.";
+
   return [
     "You are executing a step from a previously generated plan.",
     "Follow the plan but adapt if information changes.",
     "You may suggest new steps or remove future steps when justified.",
-    "Reserve space for tool usage (e.g. future code execution) by clearly describing what needs to run.",
+    "Tools are available to help you gather information or perform execution. Use them deliberately.",
+    `Available tools:\n${toolSummaries}`,
+    toolGuidance,
+    priorToolRuns,
     "Return JSON that matches the provided schema.",
     `Task: ${task}`,
     `Plan overview: ${plan.overview}`,
@@ -384,8 +590,13 @@ function applyPlanAdjustments(
   }
 }
 
-function formatExecutionThought(args: { index: number; decision: ExecutionDecision; currentStep: PlanStep }): string {
-  const { index, decision, currentStep } = args;
+function formatExecutionThought(args: {
+  index: number;
+  decision: ExecutionDecision;
+  currentStep: PlanStep;
+  toolsUsed?: Array<ToolExecutionRecord>;
+}): string {
+  const { index, decision, currentStep, toolsUsed } = args;
   const lines = [
     `<thinking>`,
     `Step ${index + 1} (${currentStep.id})`,
@@ -393,6 +604,10 @@ function formatExecutionThought(args: { index: number; decision: ExecutionDecisi
     `Status: ${decision.status}`,
     `Details: ${decision.output}`,
   ];
+
+  if (toolsUsed && toolsUsed.length) {
+    lines.push(`Tool usage:\n${describeToolExecutions(toolsUsed)}`);
+  }
 
   if (decision.notes) {
     lines.push(`Notes: ${decision.notes}`);
@@ -424,10 +639,22 @@ function describeAdjustments(adjustments: NonNullable<ExecutionDecision["planAdj
 function formatExecutionLog(entries: Array<ExecutionLogEntry>): string {
   return entries
     .map((entry) => {
-      const base = `- ${entry.step.id} (${entry.step.description}) => ${entry.status}. Outcome: ${entry.output}`;
-      const notes = entry.notes ? ` Notes: ${entry.notes}` : "";
-      const adjustments = entry.planChanges ? ` Plan changes: ${describeAdjustments(entry.planChanges)}` : "";
-      return `${base}${notes}${adjustments}`;
+      const lines: Array<string> = [];
+      lines.push(`- ${entry.step.id} (${entry.step.description}) => ${entry.status}. Outcome: ${entry.output}`);
+      if (entry.notes) {
+        lines.push(`  Notes: ${entry.notes}`);
+      }
+      if (entry.planChanges) {
+        lines.push(`  Plan changes: ${describeAdjustments(entry.planChanges)}`);
+      }
+      if (entry.toolResults?.length) {
+        const toolDetails = describeToolExecutions(entry.toolResults)
+          .split("\n")
+          .map((detail) => `    ${detail}`)
+          .join("\n");
+        lines.push(`  Tools:\n${toolDetails}`);
+      }
+      return lines.join("\n");
     })
     .join("\n");
 }
