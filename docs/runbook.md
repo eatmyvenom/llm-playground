@@ -71,6 +71,49 @@ This runbook walks through setting up the workspace, configuring environment var
    or inspect request/response shapes via Swagger at `/api`.
 4. Edit source files; the `tsx` watchers rebuild automatically.
 
+### Hit the OpenAI-Compatible API
+1. Start (or ensure you have running) the LangChain dev server. From a fresh terminal you can run just the API with:
+   ```bash
+   pnpm --filter langchain-app run openai
+   ```
+   The server listens on `http://localhost:5050` by default; override the port by setting `OPENAI_AGENT_PORT` before launching.
+2. Verify the instance is healthy:
+   ```bash
+   curl http://localhost:5050/health
+   ```
+   A JSON `{ "status": "ok" }` response confirms the Fastify server is ready.
+3. Exercise the planning agent surface by calling the OpenAI-compatible `chat/completions` endpoint:
+   ```bash
+   curl http://localhost:5050/v1/chat/completions \
+     -H 'content-type: application/json' \
+     -d '{
+       "model": "planning-agent",
+       "messages": [
+         { "role": "user", "content": "Lay out a three step plan for evaluating new MCP tools." }
+       ]
+     }'
+   ```
+   The response mirrors OpenAI’s schema; the final answer appears under `choices[0].message.content`.
+4. Swap `model` to `react-agent` to stream a ReAct-style answer backed by the MCP tools server:
+   ```bash
+   curl http://localhost:5050/v1/chat/completions \
+     -H 'content-type: application/json' \
+     -d '{
+       "model": "react-agent",
+       "messages": [
+         { "role": "user", "content": "Find recent news about autonomous planning agents." }
+       ]
+     }'
+   ```
+   Keep the tools server running (see Step 4) so the agent can satisfy tool calls.
+5. To test with the official OpenAI CLI/SDKs, point them at the local base URL and reuse your existing `OPENAI_API_KEY` (or any non-empty string when running locally):
+   ```bash
+   export OPENAI_BASE_URL="http://localhost:5050/v1"
+   export OPENAI_API_KEY="test-key"
+   openai chat.completions.create -m planning-agent -g "Summarize how to onboard a new dataset."
+   ```
+   The CLI relays through the local server, so you can swap models between `planning-agent` and `react-agent` exactly as you would against OpenAI’s hosted API.
+
 ## 6. Build for Production-like Runs
 1. Compile both packages with SWC:
    ```bash
