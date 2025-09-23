@@ -4,6 +4,7 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
+import { logger } from "./logger.js";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -20,7 +21,10 @@ async function bootstrap(): Promise<void> {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
   await app.listen(port);
-  console.log(`Tools server running on http://localhost:${port}`);
+  logger.info(`Tools server running on http://localhost:${port}`);
 }
 
-void bootstrap();
+void bootstrap().catch((error) => {
+  logger.error("Failed to bootstrap tools server", error);
+  process.exitCode = 1;
+});

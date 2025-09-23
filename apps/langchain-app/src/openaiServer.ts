@@ -6,6 +6,7 @@ import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/
 import type { BaseMessage } from "@langchain/core/messages";
 import { buildPlanningAgent } from "./agents/planningExecutorAgent.js";
 import { buildReactAgent } from "./agents/reactAgent.js";
+import { logger } from "./logger.js";
 
 const planningAgent = buildPlanningAgent();
 
@@ -63,18 +64,22 @@ async function createServer(): Promise<FastifyInstance> {
       try {
         const body = request.body;
         if (!body || typeof body !== "object") {
+          logger.warn("Rejected request with non-object body", typeof body);
           return reply.status(400).send(buildError("Request body must be a JSON object."));
         }
 
         if (!body.model) {
+          logger.warn("Rejected request with missing model field");
           return reply.status(400).send(buildError("Missing required field: model."));
         }
 
         if (!Array.isArray(body.messages) || body.messages.length === 0) {
+          logger.warn("Rejected request with invalid messages payload", body.model);
           return reply.status(400).send(buildError("messages must be a non-empty array."));
         }
 
         if (body.stream) {
+          logger.warn("Rejected request with unsupported streaming flag", body.model);
           return reply.status(400).send(buildError("stream=true is not supported for this endpoint."));
         }
 
@@ -88,10 +93,12 @@ async function createServer(): Promise<FastifyInstance> {
             return reply.send(buildResponse(body.model, content));
           }
           default:
+            logger.warn("Rejected request for unknown model", body.model);
             return reply.status(400).send(buildError(`Unknown model: ${body.model}`));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unexpected error";
+        logger.error("Failed to handle chat completion request", error);
         return reply.status(500).send(buildError(message, "internal_server_error"));
       }
     },
@@ -224,9 +231,9 @@ async function main(): Promise<void> {
     const server = await createServer();
     const port = process.env.OPENAI_AGENT_PORT ? Number(process.env.OPENAI_AGENT_PORT) : 5050;
     await server.listen({ port, host: "0.0.0.0" });
-    console.log(`OpenAI-compatible API listening on http://localhost:${port}`);
+    logger.info(`OpenAI-compatible API listening on http://localhost:${port}`);
   } catch (error) {
-    console.error("Failed to start OpenAI-compatible server", error);
+    logger.error("Failed to start OpenAI-compatible server", error);
     process.exitCode = 1;
   }
 }

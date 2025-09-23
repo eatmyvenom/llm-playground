@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { z, type ZodTypeAny } from "zod";
+import { logger } from "../logger.js";
 
 /**
  * Runtime adapter that prefers the real `@anatine/zod-decorators` package when it is
@@ -25,7 +26,7 @@ function tryLoadZodDecorators(): DecoratorModule | null {
     return require("@anatine/zod-decorators") as DecoratorModule;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") {
-      console.warn("Failed to load @anatine/zod-decorators:", error);
+      logger.warn("Failed to load @anatine/zod-decorators", error);
     }
     return null;
   }

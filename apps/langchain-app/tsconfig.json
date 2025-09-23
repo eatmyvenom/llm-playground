@@ -3,12 +3,15 @@
   "extends": "../../packages/typescript-config/tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
     "moduleResolution": "NodeNext",
     "module": "NodeNext",
     "experimentalDecorators": true,
     "verbatimModuleSyntax": true,
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@llm/logger": ["../../packages/logger/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]

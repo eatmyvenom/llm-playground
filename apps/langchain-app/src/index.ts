@@ -1,11 +1,13 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { buildReactAgent } from "./agents/reactAgent.js";
 import { buildPlanningAgent } from "./agents/planningExecutorAgent.js";
+import { logger } from "./logger.js";
 
 async function main(): Promise<void> {
   try {
     const planningAgent = buildPlanningAgent();
-    console.log("Planning agent output:\n");
+    logger.info("Planning agent output:");
+    process.stdout.write("\n");
     const planningStream = planningAgent.streamTask(
       "Create a long-horizon approach for improving the developer onboarding experience for this monorepo.",
     );
@@ -13,7 +15,9 @@ async function main(): Promise<void> {
       process.stdout.write(chunk);
     }
 
-    console.log("\n\nReAct agent output:\n");
+    process.stdout.write("\n\n");
+    logger.info("ReAct agent output:");
+    process.stdout.write("\n");
 
     const reactAgent = await buildReactAgent();
     const response = await reactAgent.invoke({
@@ -24,12 +28,12 @@ async function main(): Promise<void> {
     if (finalMessage) {
       const finalContent =
         typeof finalMessage.content === "string" ? finalMessage.content : JSON.stringify(finalMessage.content, null, 2);
-      console.log(finalContent);
+      logger.info(finalContent);
     } else {
-      console.log(response);
+      logger.info(response);
     }
   } catch (error) {
-    console.error("Failed to run LangChain agent:", error);
+    logger.error("Failed to run LangChain agent", error);
     process.exitCode = 1;
   }
 }

@@ -92,7 +92,14 @@ This runbook walks through setting up the workspace, configuring environment var
    ```
    You can also run each package manually via `pnpm --filter <package> run start`.
 
-## 7. Quality Gates Before Shipping Changes
+## 7. Inspect Logs in Dev and Production
+1. Both applications emit structured logs through the shared `@llm/logger` package.
+2. Warnings and errors are persisted under `logs/` with filenames based on `NODE_ENV` (for example, `logs/development.warn.log` and `logs/development.error.log`).
+3. Override the output directory by setting `LOG_DIR`; if unset, the directory is created alongside the process working directory.
+4. Control verbosity with `LOG_LEVEL` (`debug`, `info`, `warn`, `error`). Production defaults to `info`, development defaults to `debug`.
+5. Unhandled promise rejections and uncaught exceptions are automatically captured and written to the error log.
+
+## 8. Quality Gates Before Shipping Changes
 1. Lint all workspaces:
    ```bash
    pnpm turbo run lint
@@ -110,7 +117,7 @@ This runbook walks through setting up the workspace, configuring environment var
    pnpm turbo run clean --filter=...
    ```
 
-## 8. Troubleshooting Tips
+## 9. Troubleshooting Tips
 - **Missing `OPENAI_API_KEY`**: The ReAct agent throws an error immediately; confirm the `.env` file is loaded or export the variable in your shell.
 - **Tools server connection errors**: Ensure the server is running on the same port specified by `TOOLS_SERVER_URL`. Cross-check with `curl http://localhost:4000/health` if you expose a health endpoint.
 - **Permission errors on install**: Verify you are using pnpm v9+ and not running in a restricted directory.
