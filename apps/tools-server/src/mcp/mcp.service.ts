@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { logger } from "../logger.js";
 import { SampleDatabaseTool } from "../tools/sampleTool.js";
 import { type McpTool, type McpToolDefinition } from "../tools/baseTool.js";
 import { SmartWebSearchTool } from "../tools/smartSearchTool.js";
@@ -34,7 +35,7 @@ export class McpService {
     if (!tool) {
       throw new NotFoundException(`Tool not found: ${payload.name}`);
     }
-
+    logger.info(`Calling tool: ${payload.name}`, payload.arguments);
     return tool.call(payload.arguments);
   }
 }
