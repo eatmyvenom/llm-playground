@@ -8,24 +8,34 @@ import { createWebSearchTool } from "../tools/webSearchTool.js";
 import { createCodeExecutionTool, type CodeExecutionHandler } from "../tools/codeExecutionTool.js";
 import { createSchema, ZodField, z } from "./zodDecorators.js";
 
+type JsonPrimitive = string | number | boolean | null;
+type JsonArray = Array<JsonPrimitive>;
+type JsonObject = { [key: string]: JsonPrimitive | JsonArray };
+type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+
+const jsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const jsonArraySchema = z.array(jsonPrimitiveSchema);
+const jsonObjectSchema = z.object({}).catchall(z.union([jsonPrimitiveSchema, jsonArraySchema]));
+const jsonValueSchema: z.ZodType<JsonValue> = z.union([jsonPrimitiveSchema, jsonArraySchema, jsonObjectSchema]);
+
 type PlanStep = z.infer<typeof planStepSchema>;
 type Plan = z.infer<typeof planSchema>;
 type ExecutionDecision = z.infer<typeof executionDecisionSchema>;
 type ToolRequest = z.infer<typeof toolRequestSchema>;
 type ToolExecutionRecord = {
   toolId: string;
-  input: Record<string, unknown>;
+  input: JsonObject;
   output: string;
   success: boolean;
   error?: string;
-  rationale?: string;
+  rationale?: string | null;
 };
 type ExecutionLogEntry = {
   step: PlanStep;
   status: ExecutionDecision["status"];
   output: string;
   notes?: string;
-  planChanges?: ExecutionDecision["planAdjustments"];
+  planChanges?: NonNullable<ExecutionDecision["planAdjustments"]>;
   toolResults?: Array<ToolExecutionRecord>;
 };
 type StructuredExecutor = {
@@ -100,13 +110,13 @@ class PlanModel {
 const planSchema = createSchema(PlanModel);
 
 class ExecutionPlanAdjustmentsModel {
-  @ZodField(() => z.string().min(1).describe("Why the plan needs to change.").optional())
-  reason?: string;
+  @ZodField(() => z.string().min(1).describe("Why the plan needs to change.").nullable())
+  reason!: string | null;
 
   @ZodField(() =>
-    z.array(z.string().min(1)).describe("Steps that should be removed because they are unnecessary now.").optional(),
+    z.array(z.string().min(1)).describe("Steps that should be removed because they are unnecessary now.").nullable(),
   )
-  removeStepIds?: Array<string>;
+  removeStepIds!: Array<string> | null;
 
   @ZodField(() =>
     z
@@ -114,12 +124,12 @@ class ExecutionPlanAdjustmentsModel {
       .describe(
         "Identifier of the step after which new steps should be inserted. Defaults to the current step if omitted.",
       )
-      .optional(),
+      .nullable(),
   )
-  insertAfterStepId?: string;
+  insertAfterStepId!: string | null;
 
-  @ZodField(() => z.array(planStepSchema).describe("Additional steps to add to the plan in order.").optional())
-  newSteps?: Array<PlanStepModel>;
+  @ZodField(() => z.array(planStepSchema).describe("Additional steps to add to the plan in order.").nullable())
+  newSteps!: Array<PlanStepModel> | null;
 }
 
 const planAdjustmentsSchema = createSchema(ExecutionPlanAdjustmentsModel, {
@@ -130,11 +140,11 @@ class ToolRequestModel {
   @ZodField(() => z.string().min(1).describe("Identifier of the tool to call (e.g. web_search)."))
   toolId!: string;
 
-  @ZodField(() => z.record(z.unknown()).describe("Arguments to pass to the tool as a JSON object."))
-  input!: Record<string, unknown>;
+  @ZodField(() => z.object({}).catchall(jsonValueSchema).describe("Arguments to pass to the tool as a JSON object."))
+  input!: JsonObject;
 
-  @ZodField(() => z.string().describe("Why this tool request is needed.").optional())
-  rationale?: string;
+  @ZodField(() => z.string().describe("Why this tool request is needed.").nullable())
+  rationale!: string | null;
 }
 
 const toolRequestSchema = createSchema(ToolRequestModel, {
@@ -155,13 +165,13 @@ class ExecutionDecisionModel {
   @ZodField(() => z.string().min(1).describe("Detailed write-up of what happened while working on this step."))
   output!: string;
 
-  @ZodField(() => z.string().describe("Optional follow-up notes or todos uncovered while executing.").optional())
-  notes?: string;
+  @ZodField(() => z.string().describe("Optional follow-up notes or todos uncovered while executing.").nullable())
+  notes!: string | null;
 
   @ZodField(() =>
-    planAdjustmentsSchema.optional().describe("Describe any changes to the plan discovered during execution."),
+    planAdjustmentsSchema.describe("Describe any changes to the plan discovered during execution.").nullable(),
   )
-  planAdjustments?: z.infer<typeof planAdjustmentsSchema>;
+  planAdjustments!: z.infer<typeof planAdjustmentsSchema> | null;
 
   @ZodField(() =>
     z
@@ -170,9 +180,9 @@ class ExecutionDecisionModel {
       .describe(
         "List of tools that must be executed before the step can be completed. Leave empty when no tools are required.",
       )
-      .optional(),
+      .nullable(),
   )
-  toolRequests?: Array<ToolRequestModel>;
+  toolRequests!: Array<ToolRequestModel> | null;
 }
 
 const executionDecisionSchema = createSchema(ExecutionDecisionModel);
@@ -257,8 +267,8 @@ export function buildPlanningAgent(options?: BuildPlanningAgentOptions): Plannin
           step: currentStep,
           status: decision.status,
           output: decision.output,
-          notes: decision.notes,
-          planChanges: decision.planAdjustments,
+          notes: decision.notes ?? undefined,
+          planChanges: decision.planAdjustments ?? undefined,
           toolResults: toolHistory.length ? toolHistory : undefined,
         });
 
@@ -402,7 +412,7 @@ async function executePlanStep(args: {
           candidateDecision.notes,
           "Tool request limit reached before completion. Summarize remaining follow-ups explicitly.",
         ),
-        toolRequests: undefined,
+        toolRequests: null,
       };
       break;
     }
@@ -419,9 +429,9 @@ async function executePlanStep(args: {
     finalDecision = lastDecision;
   }
 
-  if (finalDecision.toolRequests) {
+  if (finalDecision.toolRequests != null) {
     // Ensure downstream consumers do not attempt to re-run the same tool requests.
-    finalDecision = { ...finalDecision, toolRequests: undefined };
+    finalDecision = { ...finalDecision, toolRequests: null };
   }
 
   return { decision: finalDecision, toolHistory };
@@ -462,7 +472,7 @@ async function executeToolRequests(
   return results;
 }
 
-function appendNote(existing: string | undefined, addition: string): string {
+function appendNote(existing: string | null | undefined, addition: string): string {
   return existing ? `${existing} ${addition}` : addition;
 }
 
@@ -512,9 +522,7 @@ function buildExecutionPrompt(args: {
   const completed = priorLog
     .map(
       (entry) =>
-        `Step ${entry.step.id} (${entry.step.description}) => status: ${entry.status}. Outcome: ${entry.output}${
-          entry.notes ? ` Notes: ${entry.notes}` : ""
-        }`,
+        `Step ${entry.step.id} (${entry.step.description}) => status: ${entry.status}. Outcome: ${entry.output}${entry.notes ? `\n  Notes: ${entry.notes}` : ""}`,
     )
     .join("\n");
 
@@ -524,7 +532,8 @@ function buildExecutionPrompt(args: {
 
   const toolGuidance = [
     `If you need a tool, set status to 'blocked' and populate toolRequests with entries like { "toolId": "web_search", "input": { ... }, "rationale": "why this helps" }.`,
-    "After tool results are provided, respond again with toolRequests omitted and a final status (completed/skipped/blocked).",
+    "After tool results are provided, respond again with toolRequests set to null and a final status (completed/skipped/blocked).",
+    "Always include notes, planAdjustments, and toolRequests in the JSON. Use null when a field has nothing to report.",
     `You may request tools up to ${MAX_EXECUTION_TOOL_ITERATIONS} time(s) per step before finalizing.`,
   ].join(" \n");
 

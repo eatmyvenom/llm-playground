@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "node --watch --loader=@swc-node/register/esm src/index.ts",
+    "dev": "node --watch --loader=@swc-node/register/esm src/openaiServer.ts",
     "openai": "node --watch --loader=@swc-node/register/esm src/openaiServer.ts",
     "build": "swc src -d dist --source-maps",
     "start": "node dist/index.js",
@@ -21,11 +21,11 @@
     "@langchain/core": "npm:@langchain/core@next",
     "@langchain/langgraph": "1.0.0-alpha.3",
     "@langchain/openai": "npm:@langchain/openai@next",
+    "@llm/logger": "workspace:^",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.1",
     "langchain": "npm:langchain@next",
-    "zod": "^3.23.0",
-    "@llm/logger": "workspace:*"
+    "zod": "^3.23.0"
   },
   "optionalDependencies": {
     "@anatine/zod-decorators": "^1.0.0"

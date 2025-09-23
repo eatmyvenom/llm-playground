@@ -8,9 +8,7 @@ async function main(): Promise<void> {
     const planningAgent = buildPlanningAgent();
     logger.info("Planning agent output:");
     process.stdout.write("\n");
-    const planningStream = planningAgent.streamTask(
-      "Create a long-horizon approach for improving the developer onboarding experience for this monorepo.",
-    );
+    const planningStream = planningAgent.streamTask("Find the current best LLM.");
     for await (const chunk of planningStream) {
       process.stdout.write(chunk);
     }
@@ -21,7 +19,7 @@ async function main(): Promise<void> {
 
     const reactAgent = await buildReactAgent();
     const response = await reactAgent.invoke({
-      messages: [new HumanMessage("Retrieve the status of record alpha and summarize it.")],
+      messages: [new HumanMessage("Find the current best LLM available right now and summarize why.")],
     });
 
     const finalMessage = response.messages.at(-1);
